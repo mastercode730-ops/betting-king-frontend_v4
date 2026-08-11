@@ -1,48 +1,41 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { STATIC_GAMES, getMockMonthlyChart, WHATSAPP_URL, WHATSAPP_NUMBER } from '../lib/mockData';
 
-const FLOAT_ANIMS  = ['float-a', 'float-b', 'float-c'];
-const FLOAT_DURS   = [4.2, 5.1, 6.4, 7.8, 5.6, 4.8, 6.9, 3.8, 7.2, 5.3];
-const FLOAT_DELAYS = [0, 0.8, 1.6, 2.4, 0.4, 1.2, 2.0, 0.6, 1.8, 2.8];
-const FLOAT_AMPS   = [10, 14, 18, 12, 16, 11, 15, 13, 17, 9];
-const MONTH_NAMES  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const REFRESH_MS   = 15_000;
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+const REFRESH_MS = 15_000;
 
 export default function HomePage() {
-  const [games, setGames]           = useState([]);
-  const [todayDate, setTodayDate]   = useState('');
-  const [yesterdayDate, setYDate]   = useState('');
+  const [games, setGames]           = useState(STATIC_GAMES);
+  const [todayDate, setTodayDate]   = useState(() => new Date().toISOString().split('T')[0]);
+  const [yesterdayDate, setYDate]   = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  });
   const [searchQ, setSearchQ]       = useState('');
-  const [clock, setClock]           = useState('');
-  const [chartData, setChartData]   = useState(null);
-  const [chartMonth, setChartMonth] = useState(() => String(new Date().getMonth() + 1).padStart(2,'0'));
+  const [chartMonth, setChartMonth] = useState(() => String(new Date().getMonth() + 1).padStart(2, '0'));
   const [chartYear, setChartYear]   = useState(() => String(new Date().getFullYear()));
-  const prevNums = useRef({});
+  const [chartData, setChartData]   = useState(() => getMockMonthlyChart(String(new Date().getMonth() + 1).padStart(2, '0'), String(new Date().getFullYear())));
 
-  // Clock
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setClock(now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) + ' IST');
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Fetch today results
+  // Fetch today results with fallback
   const loadResults = useCallback(async () => {
     try {
       const res = await fetch('/api/results/today');
+      if (!res.ok) throw new Error('API failed');
       const json = await res.json();
-      if (!json.success) return;
-      setGames(json.data);
-      setTodayDate(json.today_date);
-      setYDate(json.yesterday_date);
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setGames(json.data);
+        if (json.today_date) setTodayDate(json.today_date);
+        if (json.yesterday_date) setYDate(json.yesterday_date);
+      }
     } catch (e) {
-      console.warn('[SK] API error:', e.message);
+      console.warn('[SK] Using static data fallback:', e.message);
     }
   }, []);
 
@@ -52,37 +45,32 @@ export default function HomePage() {
     return () => clearInterval(id);
   }, [loadResults]);
 
-  // Load chart
+  // Load chart with fallback
   const loadChart = useCallback(async (month, year) => {
     try {
       const res = await fetch(`/api/chart/monthly?month=${month}&year=${year}`);
+      if (!res.ok) throw new Error('Chart API failed');
       const json = await res.json();
-      if (json.success) setChartData(json);
+      if (json.success && json.rows) {
+        setChartData(json);
+        return;
+      }
     } catch (e) {
-      console.warn('[SK] Chart error:', e.message);
+      // Fallback
     }
+    setChartData(getMockMonthlyChart(month, year));
   }, []);
 
-  useEffect(() => { loadChart(chartMonth, chartYear); }, [loadChart, chartMonth, chartYear]);
+  useEffect(() => {
+    loadChart(chartMonth, chartYear);
+  }, [loadChart, chartMonth, chartYear]);
 
   const filtered = searchQ
     ? games.filter(g => g.name.toLowerCase().includes(searchQ.toLowerCase()) || g.code.toLowerCase().includes(searchQ.toLowerCase()))
     : games;
 
-  const heroes = games.filter(g => g.is_highlight && g.is_main).slice(0, 4);
+  const heroGame = games.find(g => g.is_highlight && g.is_main) || games[0];
 
-  const fmt = (d) => {
-    if (!d) return '—';
-    return new Date(d).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
-  };
-
-  const categories = [
-    { key: 'LIVE', label: '🔴 LIVE — RECENT DRAWS',  cls: '' },
-    { key: 'NEXT', label: '⏳ UPCOMING DRAWS',        cls: 'cat-next' },
-    { key: 'REST', label: '✓  COMPLETED DRAWS',       cls: 'cat-rest' },
-  ];
-
-  // Chart navigation
   const goToMonth = (month, year) => {
     setChartMonth(month);
     setChartYear(year);
@@ -95,256 +83,255 @@ export default function HomePage() {
   const nextYear = mIdx === 11 ? parseInt(chartYear) + 1 : parseInt(chartYear);
   const todayDay = todayDate ? todayDate.split('-')[2] : '';
 
+  const fmtFullDate = (d) => {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  const SpinnerIcon = () => (
+    <span className="wait-spinner" title="रिजल्ट का इंतज़ार">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <circle cx="12" cy="12" r="9.5" />
+        <line className="clock-hand" x1="12" y1="12" x2="12" y2="6.5" />
+      </svg>
+    </span>
+  );
+
   return (
     <div id="wrapper">
-      <div className="scanlines" aria-hidden="true" />
-
-      {/* ── HEADER ── */}
-      <header id="header">
-        <div className="header-inner">
-          <div className="brand">
-            <div className="brand-icon" aria-hidden="true">♚</div>
-            <div>
-              <div className="brand-name">SATTA KING GOLD</div>
-              <div className="brand-sub">SUPERFAST LIVE RESULTS &amp; CHARTS</div>
-            </div>
-          </div>
-          <div className="header-search">
-            <input
-              type="text"
-              id="game-search-input"
-              placeholder="Search game…"
-              autoComplete="off"
-              aria-label="Search games"
-              value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-            />
-          </div>
-          <div className="header-live-badge">
-            <span className="live-dot" />
-            LIVE&nbsp;·&nbsp;<time id="live-timestamp">{clock}</time>
-          </div>
+      {/* ── BREAKING FLASH BAR ── */}
+      {heroGame && (
+        <div className="lrs">
+          <span className="lrs-tag"><i className="lrs-dot" />अभी आया रिजल्ट</span>
+          <span className="lrs-game">{heroGame.name}</span>
+          <span className="lrs-time">({heroGame.draw_time})</span>
+          <span className="lrs-arrow">&#10148;</span>
+          <span className="lrs-num">{heroGame.today_number === 'XX' || heroGame.today_number === '--' ? '??' : heroGame.today_number}</span>
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="btn-wa-wave" style={{ padding: '2px 10px', fontSize: '11px', marginLeft: 8 }}>
+            💬 WhatsApp
+          </a>
         </div>
+      )}
+
+      {/* ── TOP BAR ── */}
+      <header className="topbar">
+        <div className="logo">
+          <span className="logo-dot" />
+          <span>SATTA KING GOLD</span>
+        </div>
+        <nav>
+          <Link href="/" className="active">होम</Link>
+          <a href="#results">रिजल्ट</a>
+          <a href="#monthly-chart">रिकॉर्ड चार्ट</a>
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', fontWeight: 700 }}>
+            💬 WhatsApp
+          </a>
+        </nav>
+        <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="btn-live-pill">
+          जुड़िए 🔴
+        </a>
       </header>
 
-      {/* ── MAIN ── */}
-      <main id="container">
+      {/* ── SUNSET WAVE HERO SECTION ── */}
+      {heroGame && (
+        <section className="hero">
+          <div className="hero-inner">
+            <span className="hero-chip">&#9210; सुपरफास्ट लाइव रिजल्ट</span>
+            <p className="hero-date">{fmtFullDate(todayDate || new Date())}</p>
+            <p className="hero-hindi">हाँ भाई, सबसे पहले खबर यहीं आती है</p>
 
-        <div className="seo-strip" role="note">
-          <h1 style={{ fontSize: 'inherit', fontWeight: 400, display: 'inline' }}>
-            Daily Superfast Satta King Result 2026 — Live Leak Numbers for Gali, Desawar, Ghaziabad &amp; Faridabad with Complete Monthly Chart Archive.
-          </h1>
-        </div>
+            <h1 className="hero-game">{heroGame.name}</h1>
+            <div className="hero-number">
+              {heroGame.today_number === 'XX' || heroGame.today_number === '--' ? <SpinnerIcon /> : heroGame.today_number}
+            </div>
 
-        <div className="disclaimer-banner" role="note">
-          <span className="disc-badge">DISCLAIMER</span>
-          <span>Informational portal only — non-transactional. Users must comply with applicable local laws.</span>
-        </div>
-
-        {/* HERO GRID */}
-        <div className="section-head">
-          <span className="section-title">◉ LIVE DRAWS</span>
-          <span className="section-meta">Real-time · Updates every 15s</span>
-        </div>
-
-        <div className="live-hero-section">
-          <div className="live-hero-grid" id="hero-grid">
-            {heroes.map((g, i) => {
-              const isPending = g.today_number === 'XX' || g.today_number === '--';
-              return (
-                <div
-                  key={g.code}
-                  className="hero-card"
-                  id={`hero-${g.code}`}
-                  style={{
-                    '--float-dur': `${FLOAT_DURS[i % FLOAT_DURS.length]}s`,
-                    '--float-delay': `-${FLOAT_DELAYS[i % FLOAT_DELAYS.length]}s`,
-                    '--float-amp': `${FLOAT_AMPS[i % FLOAT_AMPS.length]}px`,
-                    animationName: FLOAT_ANIMS[i % FLOAT_ANIMS.length],
-                  }}
-                >
-                  <div className="hero-game-name">{g.name}</div>
-                  <span className={`hero-number ${isPending ? 'pending-hero' : ''}`}>
-                    {isPending ? '??' : g.today_number}
-                  </span>
-                  <div className="hero-meta">
-                    <span className="hero-time">DRAW: {g.draw_time}</span>
-                    {isPending
-                      ? <span className="hero-badge" style={{ background: 'rgba(255,230,0,0.15)', color: 'var(--neon-yellow)', border: '1px solid rgba(255,230,0,0.3)' }}>AWAITING</span>
-                      : <span className="hero-badge">RESULT</span>}
-                  </div>
-                </div>
-              );
-            })}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a className="hero-cta" href="#results">
+                सारे रिजल्ट देखें ↓
+              </a>
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="btn-wa-wave">
+                💬 WhatsApp पर गेम बुक करें
+              </a>
+            </div>
           </div>
-        </div>
 
-        {/* ALL RESULTS BOARD */}
-        <div className="section-head" style={{ marginTop: 40 }}>
-          <span className="section-title">▦ ALL REGIONS</span>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginLeft: 'auto' }}>
-            <span className="section-meta" id="yesterday-label">↩ {fmt(yesterdayDate)}</span>
-            <span className="section-meta" style={{ color: 'var(--neon-pink)' }} id="today-label">⬤ {fmt(todayDate)} (TODAY)</span>
+          <svg className="hero-wave" viewBox="0 0 1440 70" preserveAspectRatio="none" aria-hidden="true">
+            <path fill="#ffffff" d="M0,40 C240,80 480,0 720,25 C960,50 1200,80 1440,45 L1440,70 L0,70 Z" />
+          </svg>
+        </section>
+      )}
+
+      <div className="wrap">
+        {/* ── WHATSAPP CALLOUT BANNER ── */}
+        <div className="wa-wave-banner">
+          <div>
+            <div className="wa-wave-title">👑 सीधा खाईवाल से संपर्क करें &bull; ईमानदार सट्टा सर्विस</div>
+            <div className="wa-wave-sub">लीक सिंगल जोड़ी और हरूफ प्राप्त करने के लिए WhatsApp करें: {WHATSAPP_NUMBER}</div>
           </div>
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="btn-wa-wave">
+            📲 WhatsApp चैट शुरू करें
+          </a>
         </div>
 
-        <div id="quick-board-container">
-          {categories.map(cat => {
-            const catGames = filtered.filter(g => g.category === cat.key);
-            if (!catGames.length) return null;
-            return (
-              <div key={cat.key}>
-                <div className={`cat-label ${cat.cls}`}>
-                  <span className="cat-label-text">{cat.label}</span>
-                </div>
-                <div className="results-grid">
-                  {catGames.map((g, idx) => {
-                    const isPending  = g.today_number === 'XX' || g.today_number === '--';
-                    const todayCls   = isPending ? 'pending' : `today${g.is_highlight ? ' is-highlight-num' : ''}`;
-                    const isHighlight = g.is_highlight ? 'highlight' : '';
-                    const catCard    = cat.key === 'NEXT' ? 'cat-next-card' : cat.key === 'REST' ? 'cat-rest-card' : '';
-                    const dur        = FLOAT_DURS[idx % FLOAT_DURS.length];
-                    const delay      = FLOAT_DELAYS[idx % FLOAT_DELAYS.length];
-                    const amp        = FLOAT_AMPS[idx % FLOAT_AMPS.length];
-                    const anim       = FLOAT_ANIMS[idx % FLOAT_ANIMS.length];
-                    const chartHref  = `/${g.slug || g.code.toLowerCase()}/satta-result-chart/${g.code.toLowerCase()}/`;
-
-                    return (
-                      <div
-                        key={g.code}
-                        className={`game-card ${isHighlight} ${catCard}`}
-                        id={`card-${g.code}`}
-                        style={{
-                          '--float-dur': `${dur}s`,
-                          '--float-delay': `-${delay}s`,
-                          '--float-amp': `${amp}px`,
-                          animationName: anim,
-                        }}
-                      >
-                        <div className="game-info">
-                          <div className="game-title">{g.name}</div>
-                          <div className="game-time">⏰ {g.draw_time}</div>
-                          <Link href={chartHref} className="chart-link" id={`chart-link-${g.code}`}>
-                            ◈ RECORD CHART →
-                          </Link>
-                        </div>
-                        <div className="numbers-wrapper">
-                          <div className="num-box">
-                            <span className="num-label">YEST</span>
-                            <span className="num-badge yesterday">{g.yesterday_number}</span>
-                          </div>
-                          <div className="num-box">
-                            <span className="num-label">TODAY</span>
-                            <span className={`num-badge ${todayCls}`} id={`num-${g.code}`}>
-                              {g.today_number}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+        {/* ── SEARCH BAR ── */}
+        <div style={{ margin: '20px 0 10px' }}>
+          <input
+            type="text"
+            style={{
+              width: '100%',
+              padding: '12px 18px',
+              border: '1px solid var(--line)',
+              borderRadius: '12px',
+              fontSize: '15px',
+              background: 'var(--soft)',
+              outline: 'none',
+            }}
+            placeholder="🔍 गेम सर्च करें (Gali, Desawar, Ghaziabad...)"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+          />
         </div>
 
-        {/* MONTHLY CHART */}
-        <div className="section-head" style={{ marginTop: 48 }}>
-          <span className="section-title" id="chart-title">
-            📊 {chartData ? `${MONTH_NAMES[parseInt(chartData.month,10)-1].toUpperCase()} ${chartData.year}` : 'CHART'}
-          </span>
-          <span className="section-meta" id="chart-subtitle">
-            {chartData ? `${chartData.days_in_month} days · Combined chart` : 'Monthly result archive'}
-          </span>
-        </div>
+        {/* ── TODAY'S RESULT TABLE CARD ── */}
+        <section id="results">
+          <h2 className="section-heading">आज का रिजल्ट (TODAY RESULTS)</h2>
+          <p className="section-sub">सबसे तेज़ और सटीक परिणाम तालिका</p>
 
-        <div className="chart-wrapper">
-          <table className="brutalist-table" id="monthly-table" aria-label="Monthly result chart">
-            <thead>
-              <tr>
-                <th style={{ width: 60 }}>DAY</th>
-                <th>DSWR</th>
-                <th>FRBD</th>
-                <th>GZBD</th>
-                <th>GALI</th>
-              </tr>
-            </thead>
-            <tbody id="mix-chart-tbody">
-              {chartData?.rows?.map(r => {
-                const isToday = r.day === todayDay;
-                const cell = (val) => {
-                  const hasNum  = val && val !== 'XX' && val !== '--';
-                  return `${hasNum ? 'has-num' : ''} ${isToday ? 'today-row' : ''}`;
-                };
-                return (
-                  <tr key={r.day}>
-                    <td className="day-col">{r.day}</td>
-                    <td className={`num-col ${cell(r.DS)}`}>{r.DS}</td>
-                    <td className={`num-col ${cell(r.FB)}`}>{r.FB}</td>
-                    <td className={`num-col ${cell(r.GB)}`}>{r.GB}</td>
-                    <td className={`num-col ${cell(r.GL)}`}>{r.GL}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="result-card">
+            <table className="result-table" aria-label="Today Results">
+              <thead>
+                <tr>
+                  <th>सट्टा का नाम (GAME)</th>
+                  <th>चार्ट</th>
+                  <th>समय (TIME)</th>
+                  <th>कल का (YEST)</th>
+                  <th>आज का (TODAY)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((g) => {
+                  const isPending = g.today_number === 'XX' || g.today_number === '--';
+                  const chartHref = `/${g.slug || g.code.toLowerCase()}/satta-result-chart/${g.code.toLowerCase()}/`;
 
-          <div className="month-nav">
-            <button
-              className="nav-btn"
-              id="prev-month-link"
-              onClick={() => goToMonth(String(prevMIdx + 1).padStart(2,'0'), String(prevYear))}
-            >
-              ← {MONTH_NAMES[prevMIdx]?.substring(0,3)} {prevYear}
-            </button>
-            <span style={{ fontFamily: 'var(--text-mono)', fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2 }} id="nav-current-month">
-              {chartData ? `${MONTH_NAMES[mIdx]?.substring(0,3).toUpperCase()} ${chartData.year}` : ''}
-            </span>
-            <button
-              className="nav-btn"
-              id="next-month-link"
-              onClick={() => goToMonth(String(nextMIdx + 1).padStart(2,'0'), String(nextYear))}
-            >
-              {MONTH_NAMES[nextMIdx]?.substring(0,3)} {nextYear} →
-            </button>
+                  return (
+                    <tr key={g.code}>
+                      <td>
+                        <span className="g-name">{g.name}</span>
+                      </td>
+                      <td>
+                        <Link href={chartHref} className="g-chart">
+                          चार्ट देखें
+                        </Link>
+                      </td>
+                      <td className="g-time">{g.draw_time}</td>
+                      <td className="cell-prev">{g.yesterday_number}</td>
+                      <td className="cell-today">
+                        <span className={`today-num ${isPending ? 'wait' : ''}`}>
+                          {isPending ? <SpinnerIcon /> : g.today_number}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </main>
+        </section>
 
-      {/* ── FOOTER ── */}
-      <footer id="footer">
-        <div className="form-card">
-          <h3>Browse Archive — Select Month &amp; Year</h3>
-          <div className="form-inline">
+        {/* ── MONTHLY ARCHIVE TABLE ── */}
+        <section id="monthly-chart">
+          <h2 className="section-heading">
+            मासिक रिकॉर्ड चार्ट &mdash; {chartData ? `${MONTH_NAMES[parseInt(chartData.month, 10) - 1]?.toUpperCase()} ${chartData.year}` : 'ARCHIVE'}
+          </h2>
+          <p className="section-sub">सभी 4 मुख्य गेम का संयुक्त मासिक चार्ट</p>
+
+          <div className="chart-card-clean">
+            <table className="wave-table" aria-label="Monthly Archive Chart">
+              <thead>
+                <tr>
+                  <th style={{ width: 60 }}>तARIख</th>
+                  <th>DESAWAR</th>
+                  <th>FARIDABAD</th>
+                  <th>GAZIYABAD</th>
+                  <th>GALI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartData?.rows?.map((r) => {
+                  const isToday = r.day === todayDay;
+                  const hasNum = (val) => val && val !== 'XX' && val !== '--';
+                  return (
+                    <tr key={r.day} className={isToday ? 'today-row' : ''}>
+                      <td><b>{r.day}</b></td>
+                      <td className={hasNum(r.DS) ? 'has-num' : ''}>{r.DS === 'XX' && isToday ? <SpinnerIcon /> : r.DS}</td>
+                      <td className={hasNum(r.FB) ? 'has-num' : ''}>{r.FB === 'XX' && isToday ? <SpinnerIcon /> : r.FB}</td>
+                      <td className={hasNum(r.GB) ? 'has-num' : ''}>{r.GB === 'XX' && isToday ? <SpinnerIcon /> : r.GB}</td>
+                      <td className={hasNum(r.GL) ? 'has-num' : ''}>{r.GL === 'XX' && isToday ? <SpinnerIcon /> : r.GL}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div className="wave-nav-btns">
+              <button
+                className="wave-btn"
+                onClick={() => goToMonth(String(prevMIdx + 1).padStart(2, '0'), String(prevYear))}
+              >
+                ← {MONTH_NAMES[prevMIdx]?.substring(0, 3)} {prevYear}
+              </button>
+              <button
+                className="wave-btn"
+                onClick={() => goToMonth(String(nextMIdx + 1).padStart(2, '0'), String(nextYear))}
+              >
+                {MONTH_NAMES[nextMIdx]?.substring(0, 3)} {nextYear} →
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── FOOTER ── */}
+        <footer className="wave-footer">
+          <p style={{ color: 'var(--muted)', marginBottom: 12 }}>SATTA KING GOLD &bull; ALL RIGHTS RESERVED 2026</p>
+          <div style={{ marginBottom: 16 }}>
+            <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="btn-wa-wave">
+              💬 24x7 WhatsApp सेवा: {WHATSAPP_NUMBER}
+            </a>
+          </div>
+          <div>
             <select
-              id="month"
-              aria-label="Select month"
               value={chartMonth}
               onChange={e => setChartMonth(e.target.value)}
+              aria-label="Select month"
             >
               {MONTH_NAMES.map((m, i) => (
-                <option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>
+                <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
               ))}
             </select>
             <select
-              id="year"
-              aria-label="Select year"
               value={chartYear}
               onChange={e => setChartYear(e.target.value)}
+              aria-label="Select year"
             >
-              {[2026,2025,2024,2023,2022].map(y => (
+              {[2026, 2025, 2024, 2023, 2022].map(y => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
+
+      {/* FLOATING WHATSAPP BUTTON */}
+      <div className="floating-wa">
+        <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="wave-fab-wa">
+          💬 WhatsApp
+        </a>
+      </div>
 
       {/* FAB */}
       <div className="floating-bar">
-        <button className="btn-fab fab-refresh" id="btn-refresh" onClick={() => window.location.reload()}>
-          ↺ REFRESH
+        <button className="wave-fab" onClick={() => window.location.reload()}>
+          ↺ ताज़ा करें
         </button>
       </div>
     </div>
