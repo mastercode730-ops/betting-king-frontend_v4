@@ -104,12 +104,12 @@ export default function GameChartPage() {
 
         {/* TODAY FEATURED RESULT */}
         {thisGame && (
-          <div className="result-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+          <div className="result-card featured-card">
             <div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>{thisGame.name} &mdash; आज का परिणाम</div>
               <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>समय: {thisGame.draw_time}</div>
             </div>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div className="featured-stats">
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase' }}>कल का</div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700 }}>{thisGame.yesterday_number || '—'}</div>
@@ -141,13 +141,14 @@ export default function GameChartPage() {
         </div>
 
         {/* ANNUAL CHART TABLE */}
+        <div className="scroll-hint">👈 बाएँ-दाएँ स्क्रॉल करें (12 महीने) 👉</div>
         <div className="chart-card-clean">
           {loading ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
               <SpinnerIcon /> [ चार्ट लोड हो रहा है... ]
             </div>
           ) : (
-            <table className="wave-table" aria-label="Annual Game Chart">
+            <table className="wave-table sticky-col" aria-label="Annual Game Chart" style={{ minWidth: 640 }}>
               <thead>
                 <tr>
                   <th style={{ width: 50 }}>तारीख</th>

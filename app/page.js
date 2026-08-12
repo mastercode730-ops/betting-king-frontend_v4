@@ -142,7 +142,7 @@ export default function HomePage() {
               {!heroGame.today_number || heroGame.today_number === 'XX' || heroGame.today_number === '--' ? <SpinnerIcon /> : heroGame.today_number}
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div className="hero-cta-group">
               <a className="hero-cta" href="#results">
                 सारे रिजल्ट देखें ↓
               </a>
@@ -171,21 +171,14 @@ export default function HomePage() {
         </div>
 
         {/* ── SEARCH BAR ── */}
-        <div style={{ margin: '20px 0 10px' }}>
+        <div className="search-container">
           <input
             type="text"
-            style={{
-              width: '100%',
-              padding: '12px 18px',
-              border: '1px solid var(--line)',
-              borderRadius: '12px',
-              fontSize: '15px',
-              background: 'var(--soft)',
-              outline: 'none',
-            }}
+            className="search-input"
             placeholder="🔍 गेम सर्च करें (Gali, Desawar, Ghaziabad...)"
             value={searchQ}
             onChange={e => setSearchQ(e.target.value)}
+            aria-label="गेम सर्च करें"
           />
         </div>
 
@@ -194,6 +187,7 @@ export default function HomePage() {
           <h2 className="section-heading">आज का रिजल्ट (TODAY RESULTS)</h2>
           <p className="section-sub">सबसे तेज़ और सटीक परिणाम तालिका</p>
 
+          <div className="scroll-hint">👈 बाएँ-दाएँ स्क्रॉल करें 👉</div>
           <div className="result-card">
             <table className="result-table" aria-label="Today Results">
               <thead>
@@ -242,11 +236,12 @@ export default function HomePage() {
           </h2>
           <p className="section-sub">सभी 4 मुख्य गेम का संयुक्त मासिक चार्ट</p>
 
+          <div className="scroll-hint">👈 बाएँ-दाएँ स्क्रॉल करें 👉</div>
           <div className="chart-card-clean">
-            <table className="wave-table" aria-label="Monthly Archive Chart">
+            <table className="wave-table sticky-col" aria-label="Monthly Archive Chart">
               <thead>
                 <tr>
-                  <th style={{ width: 60 }}>तARIख</th>
+                  <th style={{ width: 70 }}>तारीख</th>
                   <th>DESAWAR</th>
                   <th>FARIDABAD</th>
                   <th>GAZIYABAD</th>
@@ -295,7 +290,7 @@ export default function HomePage() {
               💬 24x7 WhatsApp सेवा: {WHATSAPP_NUMBER}
             </a>
           </div>
-          <div>
+          <div className="wave-footer-selects">
             <select
               value={chartMonth}
               onChange={e => setChartMonth(e.target.value)}
